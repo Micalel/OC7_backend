@@ -54,83 +54,59 @@ app.get('/api/books', async (req, res) => {
   }
 });
 
-// Update an existing book
-app.put('/api/books/:id', authMiddleware(), multer, async (req, res) => {
-    try {
-      const book = await Book.findById(req.params.id);
-      if (!book) {
-        return res.status(404).json({ message: 'Livre non trouvé' });
-      }
-  
-      // Parse the updated book data from the request body
-      const updatedData = JSON.parse(req.body.book);
-  
-      if (req.file) {
-        // Handle new image upload
-        const sanitizedFilename = path.basename(req.file.filename, path.extname(req.file.filename));
-        const originalFilePath = path.join(uploadsPath, req.file.filename);
-        const optimizedFilePath = path.join(uploadsPath, `optimized-${sanitizedFilename}.jpeg`);
-  
-        await sharp(originalFilePath)
-          .resize(206, 260) // Resize the image
-          .toFormat('jpeg') // Convert to JPEG
-          .jpeg({ quality: 90 }) // Set JPEG quality
-          .toFile(optimizedFilePath);
-  
-        // Delete old image if it exists
-        if (book.imageUrl) {
-          const oldImagePath = path.join(__dirname, book.imageUrl);
-          if (fs.existsSync(oldImagePath)) {
-            fs.unlinkSync(oldImagePath);
-          }
-        }
-  
-        // Update the imageUrl field with the new file
-        updatedData.imageUrl = `/uploads/optimized-${sanitizedFilename}.jpeg`;
-      }
-  
-      // Update book fields with the new data
-      Object.assign(book, updatedData);
-      await book.save();
-  
-      res.status(200).json({ message: 'Livre modifié avec succès', book });
-    } catch (error) {
-      console.error('Erreur lors de la modification du livre :', error);
-      res.status(500).json({ error: 'Erreur lors de la modification du livre' });
+// Fetch the best-rated books
+app.get('/api/books/bestrating', async (req, res) => {
+  try {
+    const books = await Book.find()
+      .sort({ averageRating: -1 })
+      .limit(3);
+
+    res.status(200).json(books);
+  } catch (error) {
+    console.log('Erreur lors de la récupération des livres les mieux notés :', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des livres les mieux notés' });
+  }
+});
+
+// Add a rating to a book
+app.post('/api/books/:id/rating', authMiddleware(), async (req, res) => {
+  try {
+    const { userId, rating } = req.body;
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'La note doit être comprise entre 1 et 5 étoiles.' });
     }
-  });
-  
-// Add a new book
-  app.post('/api/books', authMiddleware(), multer, async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ message: 'Image requise' });
-      }
-  
-      const sanitizedFilename = path.basename(req.file.filename, path.extname(req.file.filename));
-      const originalFilePath = path.join(uploadsPath, req.file.filename);
-      const optimizedFilePath = path.join(uploadsPath, `optimized-${sanitizedFilename}.jpeg`);
-  
-      await sharp(originalFilePath)
-        .resize(206, 260)
-        .toFormat('jpeg')
-        .jpeg({ quality: 90 })
-        .toFile(optimizedFilePath);
-  
-      const bookData = JSON.parse(req.body.book);
-      const book = new Book({
-        ...bookData,
-        imageUrl: `/uploads/optimized-${sanitizedFilename}.jpeg`,
-      });
-  
-      await book.save();
-      res.status(201).json({ message: 'Livre ajouté avec succès', book });
-    } catch (error) {
-      console.error('Erreur lors de l\'ajout du livre :', error);
-      res.status(500).json({ error });
+
+    const book = await Book.findById(req.params.id);
+    if (!book) {
+      return res.status(404).json({ message: 'Livre non trouvé' });
     }
-  });
-  
+
+    book.ratings.push({ userId, grade: rating });
+    const totalRatings = book.ratings.reduce((sum, r) => sum + r.grade, 0);
+    book.averageRating = (totalRatings / book.ratings.length).toFixed(1);
+
+    await book.save();
+    res.status(200).json(book);
+  } catch (error) {
+    console.error('Erreur lors de la notation du livre :', error);
+    res.status(500).json({ message: 'Erreur lors de la notation du livre.' });
+  }
+});
+
+// Fetch a single book by its ID
+app.get('/api/books/:id', async (req, res) => {
+  try {
+    const book = await Book.findById(req.params.id);
+    if (!book) {
+      return res.status(404).json({ message: 'Livre non trouvé' });
+    }
+    res.status(200).json(book);
+  } catch (error) {
+    res.status(400).json({ error });
+  }
+});
+
 // Update an existing book
 app.put('/api/books/:id', authMiddleware(), multer, async (req, res) => {
     try {
@@ -179,46 +155,7 @@ app.put('/api/books/:id', authMiddleware(), multer, async (req, res) => {
       console.error('Error while updating the book:', error); // Log the error for debugging
       res.status(500).json({ error: 'Error while updating the book' });
     }
-  });  
-
-// Add a rating to a book
-app.post('/api/books/:id/rating', authMiddleware(), async (req, res) => {
-  try {
-    const { userId, rating } = req.body;
-
-    if (!rating || rating < 1 || rating > 5) {
-      return res.status(400).json({ message: 'La note doit être comprise entre 1 et 5 étoiles.' });
-    }
-
-    const book = await Book.findById(req.params.id);
-    if (!book) {
-      return res.status(404).json({ message: 'Livre non trouvé' });
-    }
-
-    book.ratings.push({ userId, grade: rating });
-    const totalRatings = book.ratings.reduce((sum, r) => sum + r.grade, 0);
-    book.averageRating = (totalRatings / book.ratings.length).toFixed(1);
-
-    await book.save();
-    res.status(200).json(book);
-  } catch (error) {
-    console.error('Erreur lors de la notation du livre :', error);
-    res.status(500).json({ message: 'Erreur lors de la notation du livre.' });
-  }
-});
-
-// Fetch a single book by its ID
-app.get('/api/books/:id', async (req, res) => {
-  try {
-    const book = await Book.findById(req.params.id);
-    if (!book) {
-      return res.status(404).json({ message: 'Livre non trouvé' });
-    }
-    res.status(200).json(book);
-  } catch (error) {
-    res.status(400).json({ error });
-  }
-});
+  });
 
 // Add a new book
 app.post('/api/books', authMiddleware('add'), multer, async (req, res) => {
