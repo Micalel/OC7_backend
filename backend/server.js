@@ -3,7 +3,7 @@ const http = require('http'); // Core HTTP module
 const app = require('./app'); // Import the Express app
 
 // Set the port for the backend
-const port = process.env.PORT || 3001; // Default to 3001 if no PORT is defined in .env
+const port = process.env.PORT
 
 // Create an HTTP server using the Express app
 const server = http.createServer(app);

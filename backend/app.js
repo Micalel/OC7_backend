@@ -1,5 +1,5 @@
 const authRoutes = require('./auth'); // Import authentication routes
-const authMiddleware = require('./middleware'); // Middleware for authentication
+const authMiddleware = require('./authMiddleware'); // Middleware for authentication
 const express = require('express');
 require('dotenv').config(); // Load environment variables
 const path = require('path'); // Manage file paths
@@ -42,6 +42,7 @@ app.use('/api/auth', authRoutes);
 // Serve static files from the "uploads" directory
 const uploadsPath = path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadsPath));
+
 
 // Fetch all books from the database
 app.get('/api/books', async (req, res) => {

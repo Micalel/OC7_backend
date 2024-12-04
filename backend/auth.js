@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const User = require('./models/user.model'); // Import the User model
+const User = require('./models/User'); 
 require('dotenv').config();
 
 const router = express.Router();
@@ -19,7 +19,7 @@ router.post('/signup', async (req, res) => {
     await user.save(); // Save the new user in the database
     res.status(201).json({ message: 'Utilisateur créé avec succès !' });
   } catch (error) {
-    console.error('Error during user signup:', error); // Log errors for debugging
+    console.error('Error during user signup:', error);
     res.status(400).json({ error: 'Erreur lors de la création de l\'utilisateur.' });
   }
 });
@@ -51,7 +51,7 @@ router.post('/login', async (req, res) => {
       token,
     });
   } catch (error) {
-    console.error('Error during user login:', error); // Log errors for debugging
+    console.error('Error during user login:', error);
     res.status(500).json({ error: 'Erreur lors de la connexion de l\'utilisateur.' });
   }
 });
