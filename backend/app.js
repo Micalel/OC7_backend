@@ -42,7 +42,7 @@ app.use('/api/auth', authRoutes);
 // Serve static files from the "uploads" directory
 const uploadsPath = path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadsPath));
-
+console.log('uploadsPath:', uploadsPath);
 
 // Fetch all books from the database
 app.get('/api/books', async (req, res) => {
@@ -54,19 +54,132 @@ app.get('/api/books', async (req, res) => {
   }
 });
 
-// Fetch the best-rated books
-app.get('/api/books/bestrating', async (req, res) => {
-  try {
-    const books = await Book.find()
-      .sort({ averageRating: -1 })
-      .limit(3);
-
-    res.status(200).json(books);
-  } catch (error) {
-    console.log('Erreur lors de la récupération des livres les mieux notés :', error);
-    res.status(500).json({ error: 'Erreur lors de la récupération des livres les mieux notés' });
-  }
-});
+// Update an existing book
+app.put('/api/books/:id', authMiddleware(), multer, async (req, res) => {
+    try {
+      const book = await Book.findById(req.params.id);
+      if (!book) {
+        return res.status(404).json({ message: 'Livre non trouvé' });
+      }
+  
+      // Parse the updated book data from the request body
+      const updatedData = JSON.parse(req.body.book);
+  
+      if (req.file) {
+        // Handle new image upload
+        const sanitizedFilename = path.basename(req.file.filename, path.extname(req.file.filename));
+        const originalFilePath = path.join(uploadsPath, req.file.filename);
+        const optimizedFilePath = path.join(uploadsPath, `optimized-${sanitizedFilename}.jpeg`);
+  
+        await sharp(originalFilePath)
+          .resize(206, 260) // Resize the image
+          .toFormat('jpeg') // Convert to JPEG
+          .jpeg({ quality: 90 }) // Set JPEG quality
+          .toFile(optimizedFilePath);
+  
+        // Delete old image if it exists
+        if (book.imageUrl) {
+          const oldImagePath = path.join(__dirname, book.imageUrl);
+          if (fs.existsSync(oldImagePath)) {
+            fs.unlinkSync(oldImagePath);
+          }
+        }
+  
+        // Update the imageUrl field with the new file
+        updatedData.imageUrl = `/uploads/optimized-${sanitizedFilename}.jpeg`;
+      }
+  
+      // Update book fields with the new data
+      Object.assign(book, updatedData);
+      await book.save();
+  
+      res.status(200).json({ message: 'Livre modifié avec succès', book });
+    } catch (error) {
+      console.error('Erreur lors de la modification du livre :', error);
+      res.status(500).json({ error: 'Erreur lors de la modification du livre' });
+    }
+  });
+  
+// Add a new book
+  app.post('/api/books', authMiddleware(), multer, async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: 'Image requise' });
+      }
+  
+      const sanitizedFilename = path.basename(req.file.filename, path.extname(req.file.filename));
+      const originalFilePath = path.join(uploadsPath, req.file.filename);
+      const optimizedFilePath = path.join(uploadsPath, `optimized-${sanitizedFilename}.jpeg`);
+  
+      await sharp(originalFilePath)
+        .resize(206, 260)
+        .toFormat('jpeg')
+        .jpeg({ quality: 90 })
+        .toFile(optimizedFilePath);
+  
+      const bookData = JSON.parse(req.body.book);
+      const book = new Book({
+        ...bookData,
+        imageUrl: `/uploads/optimized-${sanitizedFilename}.jpeg`,
+      });
+  
+      await book.save();
+      res.status(201).json({ message: 'Livre ajouté avec succès', book });
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout du livre :', error);
+      res.status(500).json({ error });
+    }
+  });
+  
+// Update an existing book
+app.put('/api/books/:id', authMiddleware(), multer, async (req, res) => {
+    try {
+      // Find the book by ID in the database
+      const book = await Book.findById(req.params.id);
+      if (!book) {
+        return res.status(404).json({ message: 'Book not found' });
+      }
+  
+      // Parse updated book data from the request body
+      const updatedData = JSON.parse(req.body.book);
+  
+      // Check if a new image file is provided
+      if (req.file) {
+        const sanitizedFilename = path.basename(req.file.filename, path.extname(req.file.filename));
+        const originalFilePath = path.join(uploadsPath, req.file.filename);
+        const optimizedFilePath = path.join(uploadsPath, `optimized-${sanitizedFilename}.jpeg`);
+  
+        // Convert and optimize the image to JPEG format
+        await sharp(originalFilePath)
+          .resize(206, 260) // Resize the image to the specified dimensions
+          .toFormat('jpeg') // Convert the image to JPEG format
+          .jpeg({ quality: 90 }) // Set JPEG quality to 90%
+          .toFile(optimizedFilePath);
+  
+        // If an old image exists, delete it
+        if (book.imageUrl) {
+          const oldImagePath = path.join(__dirname, book.imageUrl);
+          if (fs.existsSync(oldImagePath)) {
+            fs.unlinkSync(oldImagePath); // Delete the old image file
+          }
+        }
+  
+        // Update the image URL with the new file path
+        updatedData.imageUrl = `/uploads/optimized-${sanitizedFilename}.jpeg`;
+      }
+  
+      // Update book fields with the new data
+      Object.assign(book, updatedData);
+  
+      // Save the updated book in the database
+      await book.save();
+  
+      res.status(200).json({ message: 'Book successfully updated', book });
+    } catch (error) {
+      console.error('Error while updating the book:', error); // Log the error for debugging
+      res.status(500).json({ error: 'Error while updating the book' });
+    }
+  });  
 
 // Add a rating to a book
 app.post('/api/books/:id/rating', authMiddleware(), async (req, res) => {
@@ -116,18 +229,20 @@ app.post('/api/books', authMiddleware('add'), multer, async (req, res) => {
 
     const sanitizedFilename = path.basename(req.file.filename, path.extname(req.file.filename));
     const originalFilePath = path.join(uploadsPath, req.file.filename);
-    const optimizedFilePath = path.join(uploadsPath, `optimized-${sanitizedFilename}.webp`);
+    const optimizedFilePath = path.join(uploadsPath, `optimized-${sanitizedFilename}.jpeg`);
 
+    // Convert and optimize image to JPEG
     await sharp(originalFilePath)
-      .resize(206, 260)
-      .toFormat('webp')
-      .webp({ quality: 90 })
+      .resize(206, 260) // Resize the image
+      .toFormat('jpeg') // Convert to JPEG
+      .jpeg({ quality: 90 }) // Set JPEG quality
       .toFile(optimizedFilePath);
 
+    // Parse and save book data
     const bookData = JSON.parse(req.body.book);
     const book = new Book({
       ...bookData,
-      imageUrl: `/uploads/optimized-${sanitizedFilename}.webp`,
+      imageUrl: `/uploads/optimized-${sanitizedFilename}.jpeg`, // Update URL to JPEG
     });
 
     await book.save();
