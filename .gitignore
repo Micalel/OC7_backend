@@ -1,0 +1,82 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+/node_modules/
+/bower_components/
+
+# Build outputs
+/dist/
+/build/
+
+# Static files
+/static/
+
+# Sass cache
+.sass-cache
+
+# Environments
+.env
+.env.*.local
+
+# Editor directories and files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# React Native
+.expo/
+.expo-shared/
+
+# Others
+*.bak
+*.tmp
+
+# Coverage reports
+coverage/
+*.lcov
+
+# Git-related
+*.orig
+*.rej
+
+# Ignore debugging files
+debug/
+
+# Ignore logs and reports for testing frameworks
+/coverage/
+*.lcov
+*.clover
+
+# Ignore compiled code
+/dist/
+/out-tsc/
+
+# Ignore next.js build outputs
+.next/
+
+# Ignore Nuxt.js build outputs
+.nuxt/
