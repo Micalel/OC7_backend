@@ -11,7 +11,9 @@ module.exports = () => (req, res, next) => {
 
     // Attach the user ID from the token to the request object
     req.auth = { userId: decodedToken.userId };
+
     next(); // Continue to the next middleware or route handler
+    
   } catch (error) {
     // If any error occurs, return a 401 Unauthorized response
     res.status(401).json({ error: 'Requête non authentifiée' });

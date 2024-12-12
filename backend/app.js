@@ -1,213 +1,196 @@
-const authRoutes = require('./auth'); // Import authentication routes
-const authMiddleware = require('./authMiddleware'); // Middleware for authentication
-const express = require('express');
-require('dotenv').config(); // Load environment variables
-const path = require('path'); // Manage file paths
-const mongoose = require('mongoose'); // ODM for MongoDB
-const Book = require('./models/Book'); // Book model
-const multer = require('./multer-config'); // Multer configuration for file uploads
-const sharp = require('sharp'); // Image optimization library
-const fs = require('fs'); // File system module
-const app = express(); // Create the Express application
+  const authRoutes = require('./middlewares/auth'); // Import authentication routes
+  const authMiddleware = require('./middlewares/authMiddleware'); // Middleware for authentication
+  const express = require('express');
+  require('dotenv').config(); // Load environment variables
+  const path = require('path'); // Manage file paths
+  const mongoose = require('mongoose'); // ODM for MongoDB
+  const Book = require('./models/Book'); // Book model
+  const { upload, processImage } = require('./config/multer-config'); // Multer configuration for file uploads
+  const fs = require('fs'); // File system module
+  const app = express(); // Create the Express application
 
-// Middleware to handle CORS issues
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content, Accept, Content-Type, Authorization'
-  );
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(204); // Handle preflight requests for CORS
-  }
-  next();
-});
-
-// Connect to the MongoDB database
-mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => console.log('Connexion à MongoDB réussie !'))
-  .catch((error) => console.log('Connexion à MongoDB échouée :', error));
-
-// Middleware to parse JSON request bodies
-app.use(express.json());
-
-// Serve authentication routes
-app.use('/api/auth', authRoutes);
-
-// Serve static files from the "uploads" directory
-const uploadsPath = path.join(__dirname, 'uploads');
-app.use('/uploads', express.static(uploadsPath));
-console.log('uploadsPath:', uploadsPath);
-
-// Fetch all books from the database
-app.get('/api/books', async (req, res) => {
-  try {
-    const books = await Book.find();
-    res.status(200).json(books);
-  } catch (error) {
-    res.status(500).json({ error: 'Erreur lors de la récupération des livres' });
-  }
-});
-
-// Fetch the best-rated books
-app.get('/api/books/bestrating', async (req, res) => {
-  try {
-    const books = await Book.find()
-      .sort({ averageRating: -1 })
-      .limit(3);
-
-    res.status(200).json(books);
-  } catch (error) {
-    console.log('Erreur lors de la récupération des livres les mieux notés :', error);
-    res.status(500).json({ error: 'Erreur lors de la récupération des livres les mieux notés' });
-  }
-});
-
-// Add a rating to a book
-app.post('/api/books/:id/rating', authMiddleware(), async (req, res) => {
-  try {
-    const { userId, rating } = req.body;
-
-    if (!rating || rating < 1 || rating > 5) {
-      return res.status(400).json({ message: 'La note doit être comprise entre 1 et 5 étoiles.' });
+  // Middleware to handle CORS issues
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Origin, X-Requested-With, Content, Accept, Content-Type, Authorization'
+    );
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204); // Handle preflight requests for CORS
     }
+    next();
+  });
 
-    const book = await Book.findById(req.params.id);
-    if (!book) {
-      return res.status(404).json({ message: 'Livre non trouvé' });
-    }
+  // Connect to the MongoDB database
+  mongoose
+    .connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    })
+    .then(() => console.log('Connected to MongoDB successfully!'))
+    .catch((error) => console.log('Failed to connect to MongoDB:', error));
 
-    book.ratings.push({ userId, grade: rating });
-    const totalRatings = book.ratings.reduce((sum, r) => sum + r.grade, 0);
-    book.averageRating = (totalRatings / book.ratings.length).toFixed(1);
+  // Middleware to parse JSON request bodies
+  app.use(express.json());
 
-    await book.save();
-    res.status(200).json(book);
-  } catch (error) {
-    console.error('Erreur lors de la notation du livre :', error);
-    res.status(500).json({ message: 'Erreur lors de la notation du livre.' });
-  }
-});
+  // Serve authentication routes
+  app.use('/api/auth', authRoutes);
 
-// Fetch a single book by its ID
-app.get('/api/books/:id', async (req, res) => {
-  try {
-    const book = await Book.findById(req.params.id);
-    if (!book) {
-      return res.status(404).json({ message: 'Livre non trouvé' });
-    }
-    res.status(200).json(book);
-  } catch (error) {
-    res.status(400).json({ error });
-  }
-});
+  // Serve static files from the "uploads" directory
+  const uploadsPath = path.join(__dirname, 'uploads');
+  app.use('/uploads', express.static(uploadsPath));
 
-// Update an existing book
-app.put('/api/books/:id', authMiddleware(), multer, async (req, res) => {
+  // Fetch all books from the database (no authentication required)
+  app.get('/api/books', async (req, res) => {
     try {
-      // Find the book by ID in the database
-      const book = await Book.findById(req.params.id);
-      if (!book) {
-        return res.status(404).json({ message: 'Book not found' });
-      }
-  
-      // Parse updated book data from the request body
-      const updatedData = JSON.parse(req.body.book);
-  
-      // Check if a new image file is provided
-      if (req.file) {
-        const sanitizedFilename = path.basename(req.file.filename, path.extname(req.file.filename));
-        const originalFilePath = path.join(uploadsPath, req.file.filename);
-        const optimizedFilePath = path.join(uploadsPath, `optimized-${sanitizedFilename}.jpeg`);
-  
-        // Convert and optimize the image to JPEG format
-        await sharp(originalFilePath)
-          .resize(206, 260) // Resize the image to the specified dimensions
-          .toFormat('jpeg') // Convert the image to JPEG format
-          .jpeg({ quality: 90 }) // Set JPEG quality to 90%
-          .toFile(optimizedFilePath);
-  
-        // If an old image exists, delete it
-        if (book.imageUrl) {
-          const oldImagePath = path.join(__dirname, book.imageUrl);
-          if (fs.existsSync(oldImagePath)) {
-            fs.unlinkSync(oldImagePath); // Delete the old image file
-          }
-        }
-  
-        // Update the image URL with the new file path
-        updatedData.imageUrl = `/uploads/optimized-${sanitizedFilename}.jpeg`;
-      }
-  
-      // Update book fields with the new data
-      Object.assign(book, updatedData);
-  
-      // Save the updated book in the database
-      await book.save();
-  
-      res.status(200).json({ message: 'Book successfully updated', book });
+      const books = await Book.find();
+      res.status(200).json(books);
     } catch (error) {
-      console.error('Error while updating the book:', error); // Log the error for debugging
-      res.status(500).json({ error: 'Error while updating the book' });
+      res.status(500).json({ error: 'Erreur lors de la récupération des livres.' });
     }
   });
 
-// Add a new book
-app.post('/api/books', authMiddleware('add'), multer, async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ message: 'Image requise' });
+  // Fetch the best-rated books (no authentication required)
+  app.get('/api/books/bestrating', async (req, res) => {
+    try {
+      const books = await Book.find()
+        .sort({ averageRating: -1 })
+        .limit(3);
+
+      res.status(200).json(books);
+    } catch (error) {
+      console.log('Failed to retrieve best-rated books:', error);
+      res.status(500).json({ error: 'Erreur lors de la récupération des livres les mieux notés.' });
     }
+  });
 
-    const sanitizedFilename = path.basename(req.file.filename, path.extname(req.file.filename));
-    const originalFilePath = path.join(uploadsPath, req.file.filename);
-    const optimizedFilePath = path.join(uploadsPath, `optimized-${sanitizedFilename}.jpeg`);
+  // Add a rating to a book
+  app.post('/api/books/:id/rating', authMiddleware(), async (req, res) => {
+    try {
+      const { userId, rating } = req.body; // Extract the user ID and rating from the request body
 
-    // Convert and optimize image to JPEG
-    await sharp(originalFilePath)
-      .resize(206, 260) // Resize the image
-      .toFormat('jpeg') // Convert to JPEG
-      .jpeg({ quality: 90 }) // Set JPEG quality
-      .toFile(optimizedFilePath);
+      // Validate the rating value
+      if (!rating || rating < 1 || rating > 5) {
+        return res.status(400).json({ message: 'La note doit être comprise entre 1 et 5 étoiles.' });
+      }
+      
+      // Find the book by ID
+      const book = await Book.findById(req.params.id);
+      if (!book) {
+        return res.status(404).json({ message: 'Livre non trouvé.' });
+      }
 
-    // Parse and save book data
-    const bookData = JSON.parse(req.body.book);
-    const book = new Book({
-      ...bookData,
-      imageUrl: `/uploads/optimized-${sanitizedFilename}.jpeg`, // Update URL to JPEG
-    });
+      // Add the new rating
+      book.ratings.push({ userId, grade: rating });
+      const totalRatings = book.ratings.reduce((sum, r) => sum + r.grade, 0);
+      book.averageRating = (totalRatings / book.ratings.length).toFixed(1);
 
-    await book.save();
-    res.status(201).json({ message: 'Livre ajouté avec succès', book });
-  } catch (error) {
-    console.error('Erreur lors de l\'ajout du livre :', error);
-    res.status(500).json({ error });
-  }
-});
-
-// Delete a book and its images
-app.delete('/api/books/:id', authMiddleware('delete'), async (req, res) => {
-  try {
-    const book = await Book.findById(req.params.id);
-    if (!book) {
-      return res.status(404).json({ message: 'Livre non trouvé pour la suppression' });
+      await book.save();
+      res.status(200).json(book);
+    } catch (error) {
+      console.error('Failed to add rating to book:', error);
+      res.status(500).json({ message: 'Erreur lors de la notation du livre.' });
     }
+  });
 
-    const optimizedPath = path.join(__dirname, book.imageUrl);
-    if (fs.existsSync(optimizedPath)) {
-      fs.unlinkSync(optimizedPath);
+  // Fetch a single book by its ID (no authentication required)
+  app.get('/api/books/:id', async (req, res) => {
+    try {
+      const book = await Book.findById(req.params.id);
+      if (!book) {
+        return res.status(404).json({ message: 'Livre non trouvé.' });
+      }
+      res.status(200).json(book);
+    } catch (error) {
+      res.status(400).json({ error });
     }
+  });
 
-    await book.deleteOne();
-    res.status(200).json({ message: 'Livre supprimé avec succès' });
-  } catch (error) {
-    res.status(500).json({ error: 'Erreur lors de la suppression du livre' });
-  }
-});
+  // Update an existing book
+  app.put('/api/books/:id', authMiddleware(), upload, processImage, async (req, res) => {
+    try {
 
-module.exports = app;
+      const book = await Book.findById(req.params.id); // Find the book by ID
+      if (!book) {
+        return res.status(404).json({ message: 'Livre non trouvé.' });
+      }
+
+      if (book.userId !== req.auth.userId) { // Check if the user is the owner of the book
+        return res.status(403).json({ message: 'Requête non autorisée.' });
+      }
+
+      // Delete the old image if a new one is uploaded
+      if (req.file && book.imageUrl) {
+        const oldFilePath = path.join('uploads', path.basename(book.imageUrl));
+        if (fs.existsSync(oldFilePath)) {
+          fs.unlinkSync(oldFilePath);
+        }
+      }
+
+      // Update the book data
+      const updatedData = req.file
+        ? {
+            ...JSON.parse(req.body.book),
+            imageUrl: `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`, // New image
+          }
+        : { ...req.body };
+
+      Object.keys(updatedData).forEach((key) => {
+        book[key] = updatedData[key];
+      });
+
+      await book.save();
+      res.status(200).json({ message: 'Livre modifié avec succès.', book });
+    } catch (error) {
+      console.error('Failed to update book:', error);
+      res.status(500).json({ error: 'Erreur interne lors de la mise à jour du livre.' });
+    }
+  });
+
+  // Add a new book
+  app.post('/api/books', authMiddleware('add'), upload, processImage, async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: 'Image requise.' });
+      }
+
+      const bookData = JSON.parse(req.body.book); // Extract the book data from the request body
+
+      const book = new Book({
+        ...bookData,
+        imageUrl: `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`, // URL of the WebP image
+      });
+
+      await book.save();
+      res.status(201).json({ message: 'Livre ajouté avec succès.', book });
+    } catch (error) {
+      console.error('Failed to add book:', error);
+      res.status(500).json({ error: 'Erreur lors de l\'ajout du livre.' });
+    }
+  });
+
+  // Delete a book and its images
+  app.delete('/api/books/:id', authMiddleware('delete'), async (req, res) => {
+    try {
+      const book = await Book.findById(req.params.id);
+      if (!book) {
+        return res.status(404).json({ message: 'Livre non trouvé pour la suppression.' });
+      }
+
+      // Delete the associated image
+      const imagePath = path.join('uploads', path.basename(book.imageUrl));
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+      }
+
+      await book.deleteOne();
+      res.status(200).json({ message: 'Livre supprimé avec succès.' });
+    } catch (error) {
+      console.error('Failed to delete book:', error);
+      res.status(500).json({ error: 'Erreur lors de la suppression du livre.' });
+    }
+  });
+
+  module.exports = app;
