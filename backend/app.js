@@ -70,6 +70,7 @@
   app.post('/api/books/:id/rating', authMiddleware(), async (req, res) => {
     try {
       const { userId, rating } = req.body; // Extract the user ID and rating from the request body
+      // IMPROVEMENTS: Might be worth to use req.auth.userId instead of userId for better security
 
       // Validate the rating value
       if (!rating || rating < 1 || rating > 5) {
