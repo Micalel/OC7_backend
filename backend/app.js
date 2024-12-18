@@ -1,8 +1,8 @@
-  const authRoutes = require('./middlewares/auth'); // Import authentication routes
+  const authRoutes = require('./middlewares/routeur_auth'); // Import authentication routes
   const authMiddleware = require('./middlewares/authMiddleware'); // Middleware for authentication
   const express = require('express');
-  require('dotenv').config(); // Load environment variables
   const path = require('path'); // Manage file paths
+  require('dotenv').config({ path: './config/.env'}); // Load environment variables
   const mongoose = require('mongoose'); // ODM for MongoDB
   const Book = require('./models/Book'); // Book model
   const { upload, processImage } = require('./config/multer-config'); // Multer configuration for file uploads

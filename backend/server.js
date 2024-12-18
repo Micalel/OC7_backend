@@ -1,4 +1,4 @@
-require('dotenv').config(); // Load environment variables
+require('dotenv').config({path: './config/.env'}); // Load environment variables
 const http = require('http'); // Core HTTP module
 const app = require('./app'); // Import the Express app
 
