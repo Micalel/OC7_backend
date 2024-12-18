@@ -1,4 +1,4 @@
-  const authRoutes = require('./middlewares/routeur_auth'); // Import authentication routes
+  const authRoutes = require('./routeur/routeur_auth'); // Import authentication routes
   const authMiddleware = require('./middlewares/authMiddleware'); // Middleware for authentication
   const express = require('express');
   const path = require('path'); // Manage file paths
