@@ -5,9 +5,13 @@ const path = require('path');
 const dotenv = require('dotenv');
 const authRoutes = require('./routeur/routeur_auth');
 const bookRoutes = require('./routeur/routeur_books');
+const { loginLimiter, reqLimiter } = require('./middlewares/rate_limit');
 
 dotenv.config({ path: './config/.env' });
 const app = express();
+
+// Middleware to handle rate limiting
+app.use(reqLimiter);
 
 // Middleware to handle CORS
 app.use((req, res, next) => {
@@ -36,7 +40,7 @@ mongoose
 app.use(express.json());
 
 // authentification routes
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', loginLimiter, authRoutes);
 
 // books routes
 app.use('/api/books', bookRoutes);

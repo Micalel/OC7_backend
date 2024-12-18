@@ -37,7 +37,9 @@ module.exports = {
 
   addRatingToBook: async (req, res) => {
     try {
-      const { userId, rating } = req.body;
+      const { rating } = req.body;
+      const userId = req.auth.userId; // Use authenticated user ID
+
       if (!rating || rating < 1 || rating > 5) {
         return res.status(400).json({ message: 'La note doit être comprise entre 1 et 5 étoiles.' });
       }
@@ -45,6 +47,12 @@ module.exports = {
       const book = await Book.findById(req.params.id);
       if (!book) {
         return res.status(404).json({ message: 'Livre non trouvé.' });
+      }
+
+      // Check if the user has already rated the book
+      const existingRating = book.ratings.find((r) => r.userId === userId);
+      if (existingRating) {
+        return res.status(400).json({ message: 'Vous avez déjà noté ce livre.' });
       }
 
       book.ratings.push({ userId, grade: rating });
