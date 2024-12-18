@@ -5,7 +5,15 @@ const dotenv = require('dotenv');
 const authRoutes = require('./routeur/routeur_auth');
 const bookRoutes = require('./routeur/routeur_books');
 const { loginLimiter, reqLimiter } = require('./middlewares/rate_limit');
-dotenv.config({ path: './config/.env' });
+
+// Loads dotenv-safe to handle environment variables
+require('dotenv-safe').config({
+  allowEmptyValues: false, // never allow empty values
+  example: './config/.env.example', // example file to use if the .env file is missing
+  path: './config/.env', // path to the .env file
+});
+
+
 const app = express();
 
 // Middleware to handle rate limiting
